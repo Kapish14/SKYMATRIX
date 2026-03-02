@@ -1,0 +1,21 @@
+# Build artifacts
+build/
+output/
+
+# Backend temp files
+web/backend/uploads/
+web/backend/outputs/
+
+# Node modules
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude
+.claude/
