@@ -165,6 +165,12 @@ def serve_test_image(name: str):
     return FileResponse(str(path), media_type="application/octet-stream")
 
 
+# Serve frontend static files (built React app) — must be last
+FRONTEND_DIR = PROJECT_ROOT / "web" / "frontend" / "dist"
+if FRONTEND_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
