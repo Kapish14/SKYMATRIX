@@ -147,6 +147,45 @@ async def analyze(
     with open(output_json) as f:
         results = json.load(f)
 
+    # --- RULE-BASED ALGORITHMIC CLASSIFICATION ---
+    try:
+        from PIL import Image as PILImage
+        import numpy as np
+        # Load the auto-converted PGM image (or original if already PGM) into numpy array
+        img_arr = np.array(PILImage.open(input_path).convert("L"))
+        
+        for r in results.get("top_k_regions", []):
+            x, y, s = r["x"], r["y"], r["size"]
+            
+            # Extract Region of Interest (Crop)
+            x0, y0 = max(0, x), max(0, y)
+            x1, y1 = min(img_arr.shape[1], x + s), min(img_arr.shape[0], y + s)
+            crop = img_arr[y0:y1, x0:x1]
+            
+            # Rule-based calculation (No CNN)
+            if crop.size > 0:
+                var = np.var(crop)
+                mean = np.mean(crop)
+                
+                # Simple statistical thresholds
+                if mean < 60 and var < 300:
+                    label = "Water/Flood"
+                elif mean > 140 and var > 800:
+                    label = "Urban Specular"
+                elif var > 1200:
+                    label = "Wildfire/Burn"
+                elif mean > 180:
+                    label = "Cloud/Snow"
+                else:
+                    label = "Forest Anomaly"
+            else:
+                label = "Unknown Edge"
+                
+            r["classification"] = label
+    except Exception as e:
+        print(f"Classification error: {e}")
+    # ---------------------------------------------
+
     # Add image URLs to response
     results["job_id"] = job_id
     results["input_image_url"] = f"/uploads/{input_path.name}" if file and file.filename else f"/api/test-image-file/{test_image}"
