@@ -97,24 +97,28 @@ export function renderPGMToCanvas(canvas, pgmData, regions = [], components = []
 
   // Draw ROI rectangles
   for (const region of regions) {
-    const compIdx = components.findIndex(c =>
-      c.regions.some(r => r.x === region.x && r.y === region.y)
-    );
+    const compIdx = typeof region.component_id === 'number'
+      ? region.component_id
+      : components.findIndex(c =>
+          c.regions.some(r => r.x === region.x && r.y === region.y)
+        );
     const color = compIdx >= 0 ? COMPONENT_COLORS[compIdx % COMPONENT_COLORS.length] : '#00ffc8';
 
     const isHighlighted = highlightedRegion &&
       highlightedRegion.x === region.x &&
       highlightedRegion.y === region.y;
+    const width = region.width ?? region.size;
+    const height = region.height ?? region.size;
 
     ctx.strokeStyle = color;
     ctx.lineWidth = isHighlighted ? 3 : 1.5;
     ctx.globalAlpha = isHighlighted ? 1 : 0.8;
-    ctx.strokeRect(region.x, region.y, region.size, region.size);
+    ctx.strokeRect(region.x, region.y, width, height);
 
     // Fill with translucent color
     ctx.fillStyle = color;
     ctx.globalAlpha = isHighlighted ? 0.3 : 0.1;
-    ctx.fillRect(region.x, region.y, region.size, region.size);
+    ctx.fillRect(region.x, region.y, width, height);
     ctx.globalAlpha = 1;
   }
 

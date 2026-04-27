@@ -2,7 +2,6 @@
 #include "skymatrix/prefix_sum.hpp"
 #include "skymatrix/quadtree.hpp"
 #include "skymatrix/anomaly.hpp"
-#include "skymatrix/top_k.hpp"
 #include "skymatrix/connected_comp.hpp"
 #include <chrono>
 #include <iostream>
@@ -24,7 +23,7 @@ PipelineResult run_pipeline(const PipelineConfig& config) {
 
     // Step 1: Load image
     auto t0 = std::chrono::steady_clock::now();
-    Image img = load_pgm(config.input_path);
+    Image img = load_image(config.input_path);
     auto t1 = std::chrono::steady_clock::now();
     result.time_load_ms = elapsed_ms(t0, t1);
     result.image_width = img.width;
@@ -57,30 +56,18 @@ PipelineResult run_pipeline(const PipelineConfig& config) {
     t1 = std::chrono::steady_clock::now();
     result.time_anomaly_ms = elapsed_ms(t0, t1);
 
-    // Step 5: Connected component detection on ALL anomalies (Union-Find)
-    // This groups the full extent of each anomalous zone, not just top-K fragments
+    // Step 5: Connected component detection on all anomalies.
     t0 = std::chrono::steady_clock::now();
-    result.components = find_connected_components(result.all_anomalies);
+    auto raw_components = find_connected_components(result.all_anomalies);
+    result.components = merge_overlapping_components(raw_components);
     t1 = std::chrono::steady_clock::now();
     result.time_components_ms = elapsed_ms(t0, t1);
 
-    // Step 6: Top-K selection on components — pick the K most significant components
-    // and collect all their member regions as the top_k_regions output
+    // Step 6: Select final non-overlapping component-level areas.
     t0 = std::chrono::steady_clock::now();
-    // Components are already sorted by max_score descending
-    int num_comp = std::min(config.top_k, static_cast<int>(result.components.size()));
-    result.components.resize(num_comp);
-    // Collect all regions from the selected components
-    for (const auto& comp : result.components) {
-        for (const auto& r : comp.regions) {
-            result.top_k_regions.push_back(r);
-        }
-    }
-    // Sort top_k_regions by z_score descending
-    std::sort(result.top_k_regions.begin(), result.top_k_regions.end(),
-              [](const AnomalyResult& a, const AnomalyResult& b) {
-                  return a.z_score > b.z_score;
-              });
+    const int requested_top_k = std::max(1, config.top_k);
+    result.components = select_top_k_components(result.components, requested_top_k);
+    result.top_k_regions = select_top_k_regions(result.components, requested_top_k);
     t1 = std::chrono::steady_clock::now();
     result.time_topk_ms = elapsed_ms(t0, t1);
 
@@ -118,7 +105,8 @@ void print_report(const PipelineResult& result) {
     for (size_t i = 0; i < result.top_k_regions.size(); ++i) {
         const auto& r = result.top_k_regions[i];
         std::cout << "  #" << (i + 1) << ": pos=(" << r.x << "," << r.y
-                  << ") size=" << r.size << " z_score=" << std::setprecision(4)
+                  << ") size=" << r.effective_width() << "x" << r.effective_height()
+                  << " z_score=" << std::setprecision(4)
                   << r.z_score << " mean=" << std::setprecision(2)
                   << r.region_mean << "\n";
     }
@@ -178,6 +166,9 @@ void write_json_report(const PipelineResult& result, const std::string& path) {
         const auto& r = result.top_k_regions[i];
         f << "    {\"x\": " << r.x << ", \"y\": " << r.y
           << ", \"size\": " << r.size
+          << ", \"width\": " << r.effective_width()
+          << ", \"height\": " << r.effective_height()
+          << ", \"component_id\": " << r.component_id
           << ", \"z_score\": " << std::setprecision(6) << r.z_score
           << ", \"region_mean\": " << std::setprecision(4) << r.region_mean << "}";
         if (i + 1 < result.top_k_regions.size()) f << ",";
@@ -201,6 +192,8 @@ void write_json_report(const PipelineResult& result, const std::string& path) {
             const auto& r = comp.regions[j];
             f << "{\"x\": " << r.x << ", \"y\": " << r.y
               << ", \"size\": " << r.size
+              << ", \"width\": " << r.effective_width()
+              << ", \"height\": " << r.effective_height()
               << ", \"z_score\": " << std::setprecision(6) << r.z_score << "}";
             if (j + 1 < comp.regions.size()) f << ", ";
         }
@@ -218,8 +211,8 @@ void save_highlighted_image(const Image& img, const PipelineResult& result,
 
     // Brighten all anomalous region pixels to make them stand out
     for (const auto& r : result.top_k_regions) {
-        int x2 = std::min(r.x + r.size, img.width);
-        int y2 = std::min(r.y + r.size, img.height);
+        int x2 = std::min(r.right(), img.width);
+        int y2 = std::min(r.bottom(), img.height);
         for (int row = r.y; row < y2 && row < img.height; ++row) {
             for (int c = r.x; c < x2 && c < img.width; ++c) {
                 // Lighten anomalous pixels
@@ -252,7 +245,7 @@ void save_highlighted_image(const Image& img, const PipelineResult& result,
         }
     }
 
-    save_pgm(path, output);
+    save_image(path, output);
 }
 
 } // namespace skymatrix

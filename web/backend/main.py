@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -26,6 +27,9 @@ BINARY = PROJECT_ROOT / "build" / "skymatrix"
 UPLOAD_DIR = PROJECT_ROOT / "web" / "backend" / "uploads"
 OUTPUT_DIR = PROJECT_ROOT / "web" / "backend" / "outputs"
 TEST_IMAGES_DIR = PROJECT_ROOT / "test_images"
+SUPPORTED_IMAGE_EXTS = {
+    ".pgm", ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"
+}
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,8 +49,15 @@ def list_test_images():
     """List available test images."""
     images = []
     if TEST_IMAGES_DIR.exists():
-        for f in sorted(TEST_IMAGES_DIR.glob("*.pgm")):
-            images.append({"name": f.name, "size": f.stat().st_size})
+        for f in sorted(TEST_IMAGES_DIR.iterdir()):
+            if not f.is_file() or f.suffix.lower() not in SUPPORTED_IMAGE_EXTS:
+                continue
+            try:
+                with PILImage.open(f) as img:
+                    img.verify()
+                images.append({"name": f.name, "size": f.stat().st_size})
+            except Exception:
+                continue
     return {"images": images}
 
 
@@ -103,6 +114,11 @@ async def analyze(
                 pil_img = ImageOps.equalize(pil_img)
 
                 pil_img.save(str(input_path), format="PPM")
+            except UnidentifiedImageError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"Uploaded file is not a valid image: {file.filename}"},
+                )
             except Exception as e:
                 return JSONResponse(status_code=400, content={"error": f"Cannot convert image: {e}"})
         else:
@@ -111,6 +127,16 @@ async def analyze(
         input_path = TEST_IMAGES_DIR / test_image
         if not input_path.exists():
             return JSONResponse(status_code=404, content={"error": f"Test image not found: {test_image}"})
+        try:
+            with PILImage.open(input_path) as img:
+                img.verify()
+        except UnidentifiedImageError:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Invalid test image: {test_image}"},
+            )
+        except Exception as e:
+            return JSONResponse(status_code=400, content={"error": f"Invalid test image: {e}"})
     else:
         return JSONResponse(status_code=400, content={"error": "No image provided"})
 
@@ -149,17 +175,18 @@ async def analyze(
 
     # --- RULE-BASED ALGORITHMIC CLASSIFICATION ---
     try:
-        from PIL import Image as PILImage
-        import numpy as np
         # Load the auto-converted PGM image (or original if already PGM) into numpy array
         img_arr = np.array(PILImage.open(input_path).convert("L"))
         
         for r in results.get("top_k_regions", []):
-            x, y, s = r["x"], r["y"], r["size"]
+            x = r["x"]
+            y = r["y"]
+            w = r.get("width", r.get("size", 0))
+            h = r.get("height", r.get("size", 0))
             
             # Extract Region of Interest (Crop)
             x0, y0 = max(0, x), max(0, y)
-            x1, y1 = min(img_arr.shape[1], x + s), min(img_arr.shape[0], y + s)
+            x1, y1 = min(img_arr.shape[1], x + w), min(img_arr.shape[0], y + h)
             crop = img_arr[y0:y1, x0:x1]
             
             # Rule-based calculation (No CNN)

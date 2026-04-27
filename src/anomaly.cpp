@@ -39,7 +39,9 @@ std::vector<AnomalyResult> detect_anomalies(
             AnomalyResult r;
             r.x = node.x;
             r.y = node.y;
-            r.size = std::min({node.size, clipped_w, clipped_h}); // clip to image
+            r.width = clipped_w;
+            r.height = clipped_h;
+            r.size = std::min({node.size, clipped_w, clipped_h});
             r.z_score = combined_z;
             r.region_mean = node.mean;
             results.push_back(r);

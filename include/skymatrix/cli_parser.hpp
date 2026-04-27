@@ -8,10 +8,10 @@ namespace skymatrix {
 
 inline void print_usage(const char* prog) {
     std::cout << "SkyMatrix - Satellite Image Analytics Engine\n\n"
-              << "Usage: " << prog << " --input <path.pgm> [options]\n\n"
+              << "Usage: " << prog << " --input <image-path> [options]\n\n"
               << "Options:\n"
-              << "  --input <path>           Input PGM image (required)\n"
-              << "  --output <path>          Output PGM with highlighted ROIs\n"
+              << "  --input <path>           Input image (PGM native; others via ffmpeg)\n"
+              << "  --output <path>          Output image with highlighted ROIs\n"
               << "  --json <path>            Output JSON report\n"
               << "  --block-size <int>       Min QuadTree block size (default: 16)\n"
               << "  --z-threshold <float>    Z-Score threshold (default: 2.0)\n"

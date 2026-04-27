@@ -86,8 +86,8 @@ export default function ImageViewer({ results, highlightedRegion, onRegionHover 
     const my = (e.clientY - rect.top) * displayScale;
 
     const region = results.top_k_regions.find(r =>
-      mx >= r.x && mx <= r.x + r.size &&
-      my >= r.y && my <= r.y + r.size
+      mx >= r.x && mx <= r.x + (r.width ?? r.size) &&
+      my >= r.y && my <= r.y + (r.height ?? r.size)
     );
 
     if (region) {
@@ -111,7 +111,7 @@ export default function ImageViewer({ results, highlightedRegion, onRegionHover 
         </svg>
         <div className="text-center">
           <p className="font-display text-sm text-slate">No image loaded</p>
-          <p className="font-mono text-[10px] mt-1">Upload a PGM file or select a test image to begin</p>
+          <p className="font-mono text-[10px] mt-1">Upload an image or select a test image to begin</p>
         </div>
         {/* Grid pattern background */}
         <div className="absolute inset-0 opacity-[0.03]"
@@ -189,7 +189,7 @@ export default function ImageViewer({ results, highlightedRegion, onRegionHover 
           >
             <div className="font-mono text-[10px] space-y-0.5">
               <div className="text-phosphor font-semibold">Region ({tooltip.region.x}, {tooltip.region.y})</div>
-              <div className="text-slate">Size: {tooltip.region.size}px</div>
+              <div className="text-slate">Size: {(tooltip.region.width ?? tooltip.region.size)}×{(tooltip.region.height ?? tooltip.region.size)}px</div>
               <div className="text-slate">Z-Score: <span className="text-signal">{tooltip.region.z_score.toFixed(3)}</span></div>
               <div className="text-slate">Mean: {tooltip.region.region_mean.toFixed(1)}</div>
             </div>
